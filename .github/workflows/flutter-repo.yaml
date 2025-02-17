@@ -1,0 +1,23 @@
+name: Flutter Repository Trend
+
+on:
+  schedule:
+    - cron: "0 * * * *" # 毎時実行
+  workflow_dispatch: # 手動実行用
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Run script
+        env:
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          PVT_GITHUB_TOKEN: ${{ secrets.PVT_GITHUB_TOKEN }}
+        run: dart run bin/flutter_trend.dart
