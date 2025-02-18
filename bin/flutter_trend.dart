@@ -37,6 +37,12 @@ void main(List<String> arguments) async {
   print(oneHourAgo);
 
   final queries = [
+    // テスト用
+    // GitHubIssueQuery(
+    //   slackChannel: '#test',
+    //   since: oneHourAgo,
+    //   state: GitHubState.all,
+    // ),
     GitHubIssueQuery(
       slackChannel: '#repo-material-design',
       label: 'f: material design',
@@ -64,7 +70,7 @@ void main(List<String> arguments) async {
     GitHubIssueQuery(
       slackChannel: '#repo-pull-request-all',
       since: oneHourAgo,
-      state: GitHubState.open,
+      state: GitHubState.closed,
     ),
   ];
 
@@ -85,12 +91,23 @@ void main(List<String> arguments) async {
     final issues =
         (response.data as List).map((e) => GitHubIssue.fromJson(e)).toList();
 
+    final since = query.since;
+
     for (final issue in issues) {
-      // 1時間前に作成されたissueで、1時間前に閉じられたissueは除外
-      if (issue.createdAt.isBefore(oneHourAgo) &&
-          (issue.closedAt?.isBefore(oneHourAgo) ?? true)) {
-        continue;
+      // PRの場合、mergeされていない、もしくは1時間以内にmergeされていない場合はスキップ
+      if (issue.isPullRequest) {
+        if (issue.mergedAt == null || issue.mergedAt!.isBefore(since)) {
+          continue;
+        }
       }
+      // Issueの場合、1時間前より前に作成され、かつ1時間前より前に閉じられたissueは除外
+      else {
+        if (issue.createdAt.isBefore(since) &&
+            (issue.closedAt?.isBefore(since) ?? true)) {
+          continue;
+        }
+      }
+
       log.i(issue.title);
       final attachments = [
         {
@@ -120,7 +137,7 @@ void main(List<String> arguments) async {
           data: jsonEncode(payload),
           options: Options(headers: {'Authorization': 'Bearer $token'}),
         );
-        log.i(response.data);
+        log.i(response.data['ok']);
       } on DioException catch (e) {
         log.e(e);
       }
@@ -148,6 +165,7 @@ class GitHubIssueQuery {
       'labels': label,
       'since': since.toIso8601String(),
       'state': state.name,
+      'per_page': '100',
     };
     final queryString = params.entries
         .map(
