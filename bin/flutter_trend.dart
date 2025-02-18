@@ -24,7 +24,7 @@ final log = Logger(
 
 void main(List<String> arguments) async {
   // 1時間前
-  final oneHourAgo = DateTime.now().toUtc().subtract(Duration(days: 1));
+  final oneHourAgo = DateTime.now().toUtc().subtract(Duration(hours: 1));
   print(oneHourAgo);
 
   final queries = [
