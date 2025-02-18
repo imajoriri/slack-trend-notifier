@@ -31,6 +31,7 @@ void main(List<String> arguments) async {
   final slackRepository = SlackRepository();
   final pulls = await githubRepository.fetchPulls(since: oneHourAgo);
   for (final pull in pulls) {
+    log.i(pull.url);
     await slackRepository.sendPullRequestMessage(
       slackChannel: '#repo-pull-request-all',
       pulls: pull,
