@@ -116,7 +116,7 @@ class GitHubRepository {
 
   Future<List<GitHubIssue>> fetchIssues({
     required DateTime since,
-    List<String>? labels,
+    List<String> labels = const [],
     GitHubIssueState state = GitHubIssueState.open,
   }) async {
     final GraphQLClient client = getGithubGraphQLClient();
@@ -125,11 +125,14 @@ class GitHubRepository {
     final searchQueryType = 'type:issue';
     final searchQueryRepo = 'repo:flutter/flutter';
     final searchQueryLabel =
-        labels != null ? 'label:${labels.map((l) => '"$l"').join(',')}' : '';
+        labels.isNotEmpty ? 'label:${labels.map((l) => '"$l"').join(',')}' : '';
     final searchQueryCreated =
-        'created:>${since.toUtc().toIso8601String().replaceAll('Z', '+00:00')}';
+        state == GitHubIssueState.closed
+            ? 'closed:>${since.toUtc().toIso8601String().replaceAll('Z', '+00:00')}'
+            : 'created:>${since.toUtc().toIso8601String().replaceAll('Z', '+00:00')}';
     final searchQueryState = 'state:${state.name}';
-    final searchQueryReason = 'reason:completed';
+    final searchQueryReason =
+        state == GitHubIssueState.closed ? 'reason:completed' : '';
     final searchQuery =
         '$searchQueryType $searchQueryRepo $searchQueryLabel $searchQueryCreated $searchQueryState $searchQueryReason';
     print(searchQuery);
