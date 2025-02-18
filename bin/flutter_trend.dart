@@ -1,19 +1,10 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:dio/dio.dart';
-import 'package:flutter_trend/model/github_color.dart';
-import 'package:flutter_trend/model/github_issue.dart';
 import 'package:flutter_trend/model/github_state.dart';
+import 'package:flutter_trend/repository/github_repository.dart';
+import 'package:flutter_trend/repository/slack_repository.dart';
 import 'package:logger/web.dart';
 
 final dio = Dio();
-
-/// Slackのtokenを設定
-final token = Platform.environment['SLACK_TOKEN'];
-
-/// GitHubのtokenを設定
-final githubToken = Platform.environment['PVT_GITHUB_TOKEN'];
 
 /// ログをデバッグでも表示するためのクラス。
 // github actionsで使う想定のため問題ない。
@@ -33,126 +24,81 @@ final log = Logger(
 
 void main(List<String> arguments) async {
   // 1時間前
-  final oneHourAgo = DateTime.now().toUtc().subtract(Duration(hours: 1));
+  final oneHourAgo = DateTime.now().toUtc().subtract(Duration(days: 1));
   print(oneHourAgo);
 
   final queries = [
     // テスト用
-    // GitHubIssueQuery(
+    // GitHubIssueQueryVariables(
     //   slackChannel: '#test',
+    //   label: 'framework',
     //   since: oneHourAgo,
     //   state: GitHubState.all,
     // ),
-    GitHubIssueQuery(
-      slackChannel: '#repo-material-design',
-      label: 'f: material design',
-      since: oneHourAgo,
-      state: GitHubState.open,
-    ),
-    GitHubIssueQuery(
-      slackChannel: '#repo-cupertino',
-      label: 'f: cupertino',
-      since: oneHourAgo,
-      state: GitHubState.open,
-    ),
-    GitHubIssueQuery(
-      slackChannel: '#repo-animation',
-      label: 'a: animation',
-      since: oneHourAgo,
-      state: GitHubState.open,
-    ),
-    GitHubIssueQuery(
-      slackChannel: '#repo-animation',
-      label: 'p: animations',
-      since: oneHourAgo,
-      state: GitHubState.open,
-    ),
-    GitHubIssueQuery(
-      slackChannel: '#repo-pull-request-all',
-      since: oneHourAgo,
-      state: GitHubState.closed,
-    ),
+    // GitHubIssueQueryVariables(
+    //   slackChannel: '#repo-material-design',
+    //   label: 'f: material design',
+    //   since: oneHourAgo,
+    //   state: GitHubState.open,
+    // ),
+    // GitHubIssueQueryVariables(
+    //   slackChannel: '#repo-cupertino',
+    //   label: 'f: cupertino',
+    //   since: oneHourAgo,
+    //   state: GitHubState.open,
+    // ),
+    // GitHubIssueQueryVariables(
+    //   slackChannel: '#repo-animation',
+    //   label: 'a: animation',
+    //   since: oneHourAgo,
+    //   state: GitHubState.open,
+    // ),
+    // GitHubIssueQueryVariables(
+    //   slackChannel: '#repo-animation',
+    //   label: 'p: animations',
+    //   since: oneHourAgo,
+    //   state: GitHubState.open,
+    // ),
+    // GitHubIssueQueryVariables(
+    //   slackChannel: '#repo-pull-request-all',
+    //   since: oneHourAgo,
+    //   state: GitHubState.closed,
+    // ),
   ];
 
+  final githubRepository = GitHubRepository();
+  final slackRepository = SlackRepository();
+  final pulls = await githubRepository.fetchPulls(since: oneHourAgo);
+  for (final pull in pulls) {
+    await slackRepository.sendPullRequestMessage(
+      slackChannel: '#repo-pull-request-all',
+      pulls: pull,
+    );
+  }
+
   for (final query in queries) {
-    final url = query.generateUrl();
-    log.i(url);
-
-    late final Response response;
-    try {
-      response = await dio.get(
-        url,
-        options: Options(headers: {'Authorization': 'Bearer $githubToken'}),
-      );
-    } on DioException catch (e) {
-      log.e(e);
-      continue;
-    }
-    final issues =
-        (response.data as List).map((e) => GitHubIssue.fromJson(e)).toList();
-
-    final since = query.since;
-
+    final issues = await githubRepository.fetchIssues(
+      label: query.label,
+      since: query.since,
+    );
     for (final issue in issues) {
-      // PRの場合、mergeされていない、もしくは1時間以内にmergeされていない場合はスキップ
-      if (issue.isPullRequest) {
-        if (issue.mergedAt == null || issue.mergedAt!.isBefore(since)) {
-          continue;
-        }
-      }
-      // Issueの場合、1時間前より前に作成され、かつ1時間前より前に閉じられたissueは除外
-      else {
-        if (issue.createdAt.isBefore(since) &&
-            (issue.closedAt?.isBefore(since) ?? true)) {
-          continue;
-        }
-      }
-
-      log.i(issue.title);
-      final attachments = [
-        {
-          'color':
-              issue.isOpen
-                  ? GitHubColor.gitHubOpen.color
-                  : GitHubColor.gitHubClosed.color,
-          'title': issue.title,
-          'title_link': issue.url,
-          'text':
-              '${issue.body.substring(0, issue.body.length > 300 ? 300 : issue.body.length)}'
-              '${issue.body.length > 300 ? "..." : ""}\n\n${issue.labels.map((label) => '`${label.name}`').join(' ')}',
-          'author_name': issue.user.login,
-          'author_icon': issue.user.avatarUrl,
-        },
-      ];
-
-      final payload = {
-        'channel': query.slackChannel,
-        'text': '',
-        'attachments': attachments,
-      };
-
-      try {
-        final response = await dio.post(
-          'https://slack.com/api/chat.postMessage',
-          data: jsonEncode(payload),
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
-        );
-        log.i(response.data['ok']);
-      } on DioException catch (e) {
-        log.e(e);
-      }
+      log.i(issue.url);
+      await slackRepository.sendIssueMessage(
+        slackChannel: query.slackChannel,
+        issue: issue,
+      );
     }
   }
 }
 
 /// 参考 https://docs.github.com/ja/rest/issues/issues?apiVersion=2022-11-28#list-repository-issues
-class GitHubIssueQuery {
+class GitHubIssueQueryVariables {
   final String slackChannel;
   final String? label;
   final DateTime since;
   final GitHubState state;
 
-  GitHubIssueQuery({
+  GitHubIssueQueryVariables({
     required this.slackChannel,
     required this.since,
     required this.state,
@@ -176,5 +122,9 @@ class GitHubIssueQuery {
         )
         .join('&');
     return '$baseUrl?$queryString';
+  }
+
+  String generateGraphqlUrl([String repository = 'flutter/flutter']) {
+    return 'https://api.github.com/graphql';
   }
 }

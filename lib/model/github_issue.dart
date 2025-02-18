@@ -1,18 +1,18 @@
 import 'package:flutter_trend/model/github_label.dart';
 import 'package:flutter_trend/model/github_user.dart';
 
+enum GitHubIssueState { open, closed }
+
 /// Issueのclass
 class GitHubIssue {
   final String title;
   final String body;
   final String url;
   final int number;
-  final bool isOpen;
+  final GitHubIssueState state;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? closedAt;
-  final DateTime? mergedAt;
-  final bool isPullRequest;
   final List<GitHubLabel> labels;
   final GitHubUser user;
 
@@ -24,16 +24,12 @@ class GitHubIssue {
     required this.createdAt,
     required this.updatedAt,
     required this.closedAt,
-    required this.mergedAt,
-    required this.isOpen,
+    required this.state,
     required this.labels,
     required this.user,
-    required this.isPullRequest,
   });
 
   factory GitHubIssue.fromJson(Map<String, dynamic> json) {
-    final pullRequest = json['pull_request'];
-
     return GitHubIssue(
       title: json['title'] as String,
       body: json['body'] as String? ?? '',
@@ -45,18 +41,15 @@ class GitHubIssue {
           json['closed_at'] == null
               ? null
               : DateTime.parse(json['closed_at'] as String),
-      mergedAt:
-          json['pull_request'] == null ||
-                  json['pull_request']['merged_at'] == null
-              ? null
-              : DateTime.parse(json['pull_request']['merged_at'] as String),
-      isOpen: json['state'] == 'open',
+      state:
+          json['state'] == 'open'
+              ? GitHubIssueState.open
+              : GitHubIssueState.closed,
       labels:
           (json['labels'] as List)
               .map((e) => GitHubLabel.fromJson(e as Map<String, dynamic>))
               .toList(),
       user: GitHubUser.fromJson(json['user'] as Map<String, dynamic>),
-      isPullRequest: pullRequest != null,
     );
   }
 }
