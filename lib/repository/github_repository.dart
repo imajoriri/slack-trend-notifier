@@ -116,13 +116,23 @@ class GitHubRepository {
 
   Future<List<GitHubIssue>> fetchIssues({
     required DateTime since,
-    String? label,
+    List<String>? labels,
+    GitHubIssueState state = GitHubIssueState.open,
   }) async {
     final GraphQLClient client = getGithubGraphQLClient();
 
     // 参考: https://docs.github.com/ja/search-github/searching-on-github/searching-issues-and-pull-requests
+    final searchQueryType = 'type:issue';
+    final searchQueryRepo = 'repo:flutter/flutter';
+    final searchQueryLabel =
+        labels != null ? 'label:${labels.map((l) => '"$l"').join(',')}' : '';
+    final searchQueryCreated =
+        'created:>${since.toUtc().toIso8601String().replaceAll('Z', '+00:00')}';
+    final searchQueryState = 'state:${state.name}';
+    final searchQueryReason = 'reason:completed';
     final searchQuery =
-        'type:issue repo:flutter/flutter ${label != null ? 'label:"$label"' : ''} created:>${since.toUtc().toIso8601String().replaceAll('Z', '+00:00')}';
+        '$searchQueryType $searchQueryRepo $searchQueryLabel $searchQueryCreated $searchQueryState $searchQueryReason';
+    print(searchQuery);
 
     final QueryOptions options = QueryOptions(
       document: gql(r'''

@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_trend/model/github_state.dart';
+import 'package:flutter_trend/model/github_issue.dart';
 import 'package:flutter_trend/repository/github_repository.dart';
 import 'package:flutter_trend/repository/slack_repository.dart';
 import 'package:logger/web.dart';
@@ -25,46 +25,7 @@ final log = Logger(
 void main(List<String> arguments) async {
   // 1時間前
   final oneHourAgo = DateTime.now().toUtc().subtract(Duration(hours: 1));
-  print(oneHourAgo);
-
-  final queries = [
-    // テスト用
-    // GitHubIssueQueryVariables(
-    //   slackChannel: '#test',
-    //   label: 'framework',
-    //   since: oneHourAgo,
-    //   state: GitHubState.all,
-    // ),
-    // GitHubIssueQueryVariables(
-    //   slackChannel: '#repo-material-design',
-    //   label: 'f: material design',
-    //   since: oneHourAgo,
-    //   state: GitHubState.open,
-    // ),
-    // GitHubIssueQueryVariables(
-    //   slackChannel: '#repo-cupertino',
-    //   label: 'f: cupertino',
-    //   since: oneHourAgo,
-    //   state: GitHubState.open,
-    // ),
-    // GitHubIssueQueryVariables(
-    //   slackChannel: '#repo-animation',
-    //   label: 'a: animation',
-    //   since: oneHourAgo,
-    //   state: GitHubState.open,
-    // ),
-    // GitHubIssueQueryVariables(
-    //   slackChannel: '#repo-animation',
-    //   label: 'p: animations',
-    //   since: oneHourAgo,
-    //   state: GitHubState.open,
-    // ),
-    // GitHubIssueQueryVariables(
-    //   slackChannel: '#repo-pull-request-all',
-    //   since: oneHourAgo,
-    //   state: GitHubState.closed,
-    // ),
-  ];
+  log.i(oneHourAgo);
 
   final githubRepository = GitHubRepository();
   final slackRepository = SlackRepository();
@@ -76,55 +37,17 @@ void main(List<String> arguments) async {
     );
   }
 
-  for (final query in queries) {
-    final issues = await githubRepository.fetchIssues(
-      label: query.label,
-      since: query.since,
+  // 直近`oneHourAgo`からCloseされたIssueを取得してSlackに送信する。
+  final closedIssues = await githubRepository.fetchIssues(
+    since: oneHourAgo,
+    state: GitHubIssueState.closed,
+    labels: ['f: material design', 'f: cupertino'],
+  );
+  for (final issue in closedIssues) {
+    log.i(issue.url);
+    await slackRepository.sendIssueMessage(
+      slackChannel: '#repo-pull-request-all',
+      issue: issue,
     );
-    for (final issue in issues) {
-      log.i(issue.url);
-      await slackRepository.sendIssueMessage(
-        slackChannel: query.slackChannel,
-        issue: issue,
-      );
-    }
-  }
-}
-
-/// 参考 https://docs.github.com/ja/rest/issues/issues?apiVersion=2022-11-28#list-repository-issues
-class GitHubIssueQueryVariables {
-  final String slackChannel;
-  final String? label;
-  final DateTime since;
-  final GitHubState state;
-
-  GitHubIssueQueryVariables({
-    required this.slackChannel,
-    required this.since,
-    required this.state,
-    this.label,
-  });
-
-  String generateUrl([String repository = 'flutter/flutter']) {
-    final baseUrl = 'https://api.github.com/repos/$repository/issues';
-    final params = {
-      'labels': label,
-      'since': since.toIso8601String(),
-      'state': state.name,
-      'per_page': '100',
-    };
-    final queryString = params.entries
-        .map(
-          (e) =>
-              e.value == null
-                  ? ''
-                  : '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value!)}',
-        )
-        .join('&');
-    return '$baseUrl?$queryString';
-  }
-
-  String generateGraphqlUrl([String repository = 'flutter/flutter']) {
-    return 'https://api.github.com/graphql';
   }
 }
